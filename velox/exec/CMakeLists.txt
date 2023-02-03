@@ -73,11 +73,11 @@ target_link_libraries(
   velox_common_base
   velox_test_util)
 
-if(${VELOX_BUILD_TESTING})
+#if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)
-elseif(${VELOX_BUILD_TEST_UTILS})
-  add_subdirectory(tests/utils)
-endif()
+#if(${VELOX_BUILD_TEST_UTILS})
+#  add_subdirectory(tests/utils)
+#endif()
 
 if(${VELOX_ENABLE_BENCHMARKS})
   add_subdirectory(benchmarks)

@@ -36,3 +36,28 @@ target_link_libraries(
   ${FOLLY_WITH_DEPENDENCIES}
   ${FOLLY_BENCHMARK}
   ${FMT})
+
+
+add_executable(lawben_tpch_gen TpchGen.cpp)
+
+target_link_libraries(
+    lawben_tpch_gen
+
+    velox_aggregates
+    velox_exec
+    velox_exec_test_lib
+    velox_dwio_common
+    velox_dwio_common_exception
+    velox_dwio_parquet_reader
+    velox_dwio_parquet_writer
+    velox_dwio_type_fbhive
+    velox_hive_connector
+    velox_exception
+    velox_memory
+    velox_process
+    velox_serialization
+    velox_encode
+    velox_type
+    velox_caching
+    ${FOLLY_WITH_DEPENDENCIES}
+    ${FMT})

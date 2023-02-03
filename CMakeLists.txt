@@ -442,6 +442,7 @@ include_directories(SYSTEM velox)
 include_directories(SYSTEM velox/external)
 include_directories(SYSTEM velox/external/duckdb)
 include_directories(SYSTEM velox/external/duckdb/tpch/dbgen/include)
+include_directories(SYSTEM /usr/local/include)
 
 include(CTest) # include after project() but before add_subdirectory()
 
