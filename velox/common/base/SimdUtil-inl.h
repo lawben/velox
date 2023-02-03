@@ -84,6 +84,8 @@ struct BitMask<T, A, 1> {
     return (vaddv_u8(vget_high_u8(vmask)) << 8) | vaddv_u8(vget_low_u8(vmask));
   }
 #endif
+
+  static int toBitMask(xsimd::batch_bool<T, A> mask, const xsimd::generic&);
 };
 
 template <typename T, typename A>
@@ -526,6 +528,10 @@ struct Gather<T, int32_t, A, 8> {
     return Batch64<int32_t>::load_unaligned(indices);
   }
 
+  static Batch64<int32_t> loadIndices(
+      const int32_t* indices,
+      const xsimd::generic&);
+
 #if XSIMD_WITH_AVX2
   template <int kScale>
   static xsimd::batch<T, A>
@@ -898,6 +904,10 @@ struct GetHalf<int64_t, int32_t, A> {
     return vmovl_s32(half);
   }
 #endif
+
+  template <bool kSecond>
+  static xsimd::batch<int64_t, A> apply(xsimd::batch<int32_t, A> data,
+                                      const xsimd::generic&);
 };
 
 template <typename A>
@@ -1036,6 +1046,8 @@ struct Crc32<uint64_t, A> {
     return checksum;
   }
 #endif
+
+  static uint32_t apply(uint32_t checksum, uint64_t value, const xsimd::generic&);
 };
 
 } // namespace detail
@@ -1064,7 +1076,8 @@ struct HalfBatchImpl<
     A,
     std::enable_if_t<
         std::is_base_of_v<xsimd::sse2, A> ||
-        std::is_base_of_v<xsimd::neon, A>>> {
+        std::is_base_of_v<xsimd::neon, A> ||
+        std::is_base_of_v<xsimd::generic, A>>> {
   using Type = Batch64<T>;
 };
 
@@ -1081,6 +1094,8 @@ struct ReinterpretBatch {
     return xsimd::batch<T, A>(data);
   }
 #endif
+
+  static xsimd::batch<T, A> apply(xsimd::batch<U, A> data, const xsimd::generic&);
 };
 
 template <typename T, typename A>

@@ -684,6 +684,8 @@ inline xsimd::batch<int64_t> cvtU32toI64(simd::Batch64<int32_t> values) {
 }
 #endif
 
+xsimd::batch<int64_t> cvtU32toI64(simd::Batch64<int32_t> values);
+
 } // namespace detail
 
 template <typename T, typename TFilter, typename ExtractValues, bool isDense>
@@ -851,10 +853,10 @@ class DictionaryColumnVisitor
           dictMask,
           reinterpret_cast<const int32_t*>(filterCache() - 3),
           indices);
-      auto unknowns = simd::toBitMask(xsimd::batch_bool<int32_t>(
+      auto unknowns = simd::toBitMask(xsimd::batch_bool<uint32_t>(
           simd::reinterpretBatch<uint32_t>((cache & (kUnknown << 24)) << 1)));
       auto passed = simd::toBitMask(
-          xsimd::batch_bool<int32_t>(simd::reinterpretBatch<uint32_t>(cache)));
+          xsimd::batch_bool<uint32_t>(simd::reinterpretBatch<uint32_t>(cache)));
       if (UNLIKELY(unknowns)) {
         uint16_t bits = unknowns;
         // Ranges only over inputs that are in dictionary, the not in dictionary
@@ -1210,10 +1212,10 @@ class StringDictionaryColumnVisitor
       } else {
         cache = simd::gather<int32_t, int32_t, 1>(base, indices);
       }
-      auto unknowns = simd::toBitMask(xsimd::batch_bool<int32_t>(
+      auto unknowns = simd::toBitMask(xsimd::batch_bool<uint32_t>(
           simd::reinterpretBatch<uint32_t>((cache & (kUnknown << 24)) << 1)));
       auto passed = simd::toBitMask(
-          xsimd::batch_bool<int32_t>(simd::reinterpretBatch<uint32_t>(cache)));
+          xsimd::batch_bool<uint32_t>(simd::reinterpretBatch<uint32_t>(cache)));
       if (UNLIKELY(unknowns)) {
         uint16_t bits = unknowns;
         while (bits) {

@@ -21,7 +21,10 @@
 #include "velox/common/base/Exceptions.h"
 
 #include <folly/Likely.h>
-#include <xsimd/xsimd.hpp>
+
+// REPLACED_XSIMD:
+// #include <xsimd/xsimd.hpp>
+#include "velox/common/base/SimdIntrinsics.h"
 
 namespace facebook::velox::simd {
 
@@ -349,13 +352,17 @@ uint32_t crc32U64(uint32_t checksum, uint64_t value, const A& arch = {}) {
 template <typename T, typename A = xsimd::default_arch>
 xsimd::batch<T, A> iota(const A& = {});
 
+// Reinterpret batch of U into batch of T.
+template <typename T, typename U, typename A = xsimd::default_arch>
+xsimd::batch<T, A> reinterpretBatch(xsimd::batch<U, A>, const A& = {});
+
 // Returns a batch with all elements set to value.  For batch<bool> we
 // use one bit to represent one element.
 template <typename T, typename A = xsimd::default_arch>
 xsimd::batch<T, A> setAll(T value, const A& = {}) {
   if constexpr (std::is_same_v<T, bool>) {
 #if defined(__aarch64__)
-    return xsimd::batch<T, A>(
+    return simd::reinterpretBatch<bool>(
         xsimd::broadcast<unsigned char, A>(value ? -1 : 0));
 #else
     return xsimd::batch<T, A>(xsimd::broadcast<int64_t, A>(value ? -1 : 0));
@@ -409,10 +416,6 @@ template <typename T>
 inline bool isDense(const T* values, int32_t size) {
   return (values[size - 1] - values[0] == size - 1);
 }
-
-// Reinterpret batch of U into batch of T.
-template <typename T, typename U, typename A = xsimd::default_arch>
-xsimd::batch<T, A> reinterpretBatch(xsimd::batch<U, A>, const A& = {});
 
 } // namespace facebook::velox::simd
 

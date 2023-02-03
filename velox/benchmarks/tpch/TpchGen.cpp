@@ -6,6 +6,8 @@
 #include "velox/dwio/parquet/writer/Writer.h"
 #include "velox/tpch/gen/TpchGen.h"
 
+#include "velox/common/base/SimdUtil.h"
+
 using namespace facebook::velox;
 using facebook::velox::parquet::Writer;
 
@@ -75,6 +77,8 @@ void generateTable(tpch::Table table, const std::filesystem::path& data_dir) {
 int main() {
   const std::filesystem::path data_dir = "/tmp/tpch-data";
   std::filesystem::create_directories(data_dir);
+
+  auto x = simd::setAll(false);
 
 //  generateTable(tpch::Table::TBL_ORDERS, data_dir);
 //  generateTable(tpch::Table::TBL_PART, data_dir);
