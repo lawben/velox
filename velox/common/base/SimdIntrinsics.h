@@ -4,34 +4,26 @@
 
 #include <arm_neon.h>
 
-// We still need this for convenience in this file. None of it is exposed, as we
-// put it in the nested namespace.
-namespace real_xsimd {
-// #include <xsimd/xsimd.hpp>
-// using namespace xsimd;
-}
-
 #define XSIMD_TEMPLATE template <typename T, typename A = default_arch>
 
 // #define XSIMD_WITH_NEON 1
 
 namespace xsimd {
 
-struct default_arch;
-
 struct generic {
   constexpr generic() = default;
-  generic(default_arch arch);
-};
 
-struct default_arch : public generic {
-  constexpr default_arch() = default;
-  // TODO: 16 fails here:
-  // /Users/law/repos/velox-lawben/./velox/common/base/SimdUtil-inl.h:222:13:
   static constexpr size_t alignment() noexcept {
     return 16;
   }
+  static constexpr size_t size() noexcept {
+    return 16;
+  }
+
+  static constexpr auto name() { return "compiler_vec"; }
 };
+
+using default_arch = generic;
 
 ///////////////////////////////
 ///          TYPES          ///
@@ -43,38 +35,25 @@ struct has_simd_register : std::false_type {};
 
 template <class T, class Arch>
 struct simd_register {
+  using vector_type = T;
   struct register_type {};
+  register_type data;
 };
 
 //    using vector_type __attribute__((vector_size(16))) = SCALAR_TYPE;
 
-#define XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, ISA) \
-  template <>                                         \
-  struct simd_register<SCALAR_TYPE, ISA> {            \
-    using vector_type = uint8x16_t;                   \
-    using register_type = vector_type;                \
-    register_type data;                               \
-    operator register_type() const noexcept {         \
-      return data;                                    \
-    }                                                 \
-  };                                                  \
-  template <>                                         \
+#define XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, ISA)                          \
+  template <>                                                                  \
+  struct simd_register<SCALAR_TYPE, ISA> {                                     \
+    using vector_type __attribute__((vector_size(ISA::size()))) = SCALAR_TYPE; \
+    using register_type = vector_type;                                         \
+    register_type data;                                                        \
+    operator register_type() const noexcept {                                  \
+      return data;                                                             \
+    }                                                                          \
+  };                                                                           \
+  template <>                                                                  \
   struct has_simd_register<SCALAR_TYPE, ISA> : std::true_type {}
-
-#define XSIMD_DECLARE_INVALID_SIMD_REGISTER(SCALAR_TYPE, ISA) \
-  template <>                                                 \
-  struct has_simd_register<SCALAR_TYPE, ISA> : std::false_type {}
-
-#define XSIMD_DECLARE_SIMD_REGISTER_ALIAS(ISA, ISA_BASE)                      \
-  template <class T>                                                          \
-  struct simd_register<T, ISA> : simd_register<T, ISA_BASE> {                 \
-    using register_type = typename simd_register<T, ISA_BASE>::register_type; \
-    simd_register(register_type reg) noexcept                                 \
-        : simd_register<T, ISA_BASE>{reg} {}                                  \
-    simd_register() = default;                                                \
-  };                                                                          \
-  template <class T>                                                          \
-  struct has_simd_register<T, ISA> : has_simd_register<T, ISA_BASE> {}
 
 XSIMD_DECLARE_SIMD_REGISTER(signed char, generic);
 XSIMD_DECLARE_SIMD_REGISTER(unsigned char, generic);
@@ -88,7 +67,22 @@ XSIMD_DECLARE_SIMD_REGISTER(unsigned long int, generic);
 XSIMD_DECLARE_SIMD_REGISTER(long long int, generic);
 XSIMD_DECLARE_SIMD_REGISTER(unsigned long long int, generic);
 XSIMD_DECLARE_SIMD_REGISTER(float, generic);
-XSIMD_DECLARE_SIMD_REGISTER(bool, generic);
+XSIMD_DECLARE_SIMD_REGISTER(double, generic);
+
+// Cannot declare bool like this. Doing it manually with bool = uint8_t.
+// XSIMD_DECLARE_SIMD_REGISTER(bool, generic);
+template <>
+struct simd_register<bool, generic> {
+  using vector_type __attribute__((vector_size(generic::size()))) = uint8_t;
+  using register_type = vector_type;
+  register_type data;
+  operator register_type() const noexcept {
+    return data;
+  }
+};
+template <>
+struct has_simd_register<bool, generic> : std::true_type {};
+
 
 template <class T, class Arch>
 struct get_bool_simd_register {
@@ -159,24 +153,49 @@ struct batch_bool : public types::get_bool_simd_register_t<T, A> {
   using batch_type = batch<T, A>;
 
   batch_bool() = default;
-  batch_bool(bool val) noexcept;
-  batch_bool(register_type reg) noexcept;
-  batch_bool(batch_type batch) noexcept;
-  template <class... Ts>
-  batch_bool(bool val0, bool val1, Ts... vals) noexcept;
+  batch_bool(bool val) noexcept {
+      this->data = val - register_type{};
+  }
+
+  batch_bool(register_type reg) noexcept {
+      this->data = reg;
+  }
+  batch_bool(batch_type batch) noexcept {
+      this->data = batch.data;
+  }
+//  template <class... Ts>
+//  batch_bool(bool val0, bool val1, Ts... vals) noexcept;
 
   // comparison operators
-  batch_bool operator==(const batch_bool& other) const noexcept;
-  batch_bool operator!=(const batch_bool& other) const noexcept;
+  batch_bool operator==(const batch_bool& other) const noexcept {
+      return this->data == other.data;
+  }
+  batch_bool operator!=(const batch_bool& other) const noexcept {
+      return this->data != other.data;
+  }
 
   // logical operators
-  batch_bool operator~() const noexcept;
-  batch_bool operator!() const noexcept;
-  batch_bool operator&(const batch_bool& other) const noexcept;
-  batch_bool operator|(const batch_bool& other) const noexcept;
-  batch_bool operator^(const batch_bool& other) const noexcept;
-  batch_bool operator&&(const batch_bool& other) const noexcept;
-  batch_bool operator||(const batch_bool& other) const noexcept;
+  batch_bool operator~() const noexcept {
+      return ~this->data;
+  }
+  batch_bool operator!() const noexcept {
+      return !this->data;
+  }
+  batch_bool operator&(const batch_bool& other) const noexcept {
+      return this->data & other.data;
+  }
+  batch_bool operator|(const batch_bool& other) const noexcept {
+      return this->data | other.data;
+  }
+  batch_bool operator^(const batch_bool& other) const noexcept {
+      return this->data ^ other.data;
+  }
+  batch_bool operator&&(const batch_bool& other) const noexcept {
+      return this->data && other.data;
+  }
+  batch_bool operator||(const batch_bool& other) const noexcept {
+      return this->data || other.data;
+  }
 
   // update operators
   batch_bool& operator&=(const batch_bool& other) const noexcept {
@@ -189,76 +208,163 @@ struct batch_bool : public types::get_bool_simd_register_t<T, A> {
     return (*this) = (*this) ^ other;
   }
 
-  void store_aligned(void* dst);
-  void store_unaligned(void* dst);
+  template <typename U>
+  void store_aligned(U* dst) {
+//    *reinterpret_cast<register_type*>(dst) = this->data;
+    using batch_type = batch<T, A>;
+    alignas(A::alignment()) T buffer[this->size];
+    batch_type(*this).store_aligned(&buffer[0]);
+    for (std::size_t i = 0; i < size; ++i)
+      dst[i] = bool(buffer[i]);
+  }
 
-  static batch_bool load_aligned(void* dst);
-  static batch_bool load_unaligned(void* dst);
+  void store_unaligned(void* dst) {
+    // Makes no difference here.
+    store_aligned(dst);
+  }
+
+  static batch_bool load_aligned(const bool* src) {
+    batch_type ref{0};
+    alignas(A::alignment()) T buffer[size];
+    for (std::size_t i = 0; i < size; ++i)
+      buffer[i] = src[i] ? 1 : 0;
+    return ref != batch_type::load_aligned(&buffer[0]);
+  }
+
+  static batch_bool load_unaligned(const bool* src) {
+    return load_aligned(src);
+  }
 };
 
 template <typename T, typename A>
 struct batch : public types::simd_register<T, A> {
-  static constexpr size_t size = 16 / sizeof(T);
+  static constexpr size_t size = A::size() / sizeof(T);
   using arch_type = A;
   using batch_bool_type = batch_bool<T, A>;
   using register_type = typename types::simd_register<T, A>::register_type;
 
-  batch() = default; ///< Create a batch initialized with undefined values.
-  batch(T val) noexcept;
+  batch() = default;
 
-  explicit batch(batch_bool_type const& b) noexcept;
-  batch(register_type reg) noexcept;
+  batch(T val) noexcept {
+    this->data = val - register_type{};
+  }
+
+  explicit batch(const batch_bool_type& b) noexcept {
+    this->data = reinterpret_cast<const register_type&>(b.data);
+  }
+
+  batch(register_type reg) noexcept {
+    this->data = reg;
+  }
 
   template <class... Ts>
-  batch(T val0, T val1, Ts... vals) noexcept;
+  batch(T val0, T val1, Ts... vals) noexcept {
+    static_assert(sizeof...(Ts) + 2 == size, "#args must match size of vector");
+    this->data = register_type{val0, val1, vals...};
+  };
 
-  batch_bool<T, A> operator==(const batch& other) const noexcept;
-  batch_bool<T, A> operator!=(const batch& other) const noexcept;
-  batch_bool<T, A> operator>=(const batch& other) const noexcept;
-  batch_bool<T, A> operator<=(const batch& other) const noexcept;
-  batch_bool<T, A> operator>(const batch& other) const noexcept;
-  batch_bool<T, A> operator<(const batch& other) const noexcept;
+  batch_bool<T, A> operator==(const batch& other) const noexcept {
+    return batch_bool<T, A>(this->data == other.data);
+  }
+  batch_bool<T, A> operator!=(const batch& other) const noexcept {
+    return batch_bool<T, A>(this->data != other.data);
+  }
+  batch_bool<T, A> operator>=(const batch& other) const noexcept {
+    return batch_bool<T, A>(this->data >= other.data);
+  }
+  batch_bool<T, A> operator<=(const batch& other) const noexcept {
+    return batch_bool<T, A>(this->data <= other.data);
+  }
+  batch_bool<T, A> operator>(const batch& other) const noexcept {
+    return batch_bool<T, A>(this->data > other.data);
+  }
+  batch_bool<T, A> operator<(const batch& other) const noexcept {
+    return batch_bool<T, A>(this->data < other.data);
+  }
 
-  batch operator^(const batch& other) const noexcept;
-  batch operator&(const batch& other) const noexcept;
-  batch operator*(const batch& other) const noexcept;
-  batch operator+(const batch& other) const noexcept;
-  batch operator-(const batch& other) const noexcept;
-  batch operator<<(const batch& other) const noexcept;
-  batch operator>>(const batch& other) const noexcept;
+  batch operator^(const batch& other) const noexcept {
+    return this->data ^ other.data;
+  }
+  batch operator&(const batch& other) const noexcept {
+    return this->data & other.data;
+  }
+  batch operator*(const batch& other) const noexcept {
+    return this->data * other.data;
+  }
+  batch operator+(const batch& other) const noexcept {
+    return this->data + other.data;
+  }
+  batch operator-(const batch& other) const noexcept {
+    return this->data - other.data;
+  }
+  batch operator<<(const batch& other) const noexcept {
+    return this->data << other.data;
+  }
+  batch operator>>(const batch& other) const noexcept {
+    return this->data >> other.data;
+  }
 
-  static batch broadcast(T value);
+  T get(size_t pos) { return this->data[pos]; }
+
+  static batch broadcast(T value) {
+    return batch(value);
+  }
 
   template <typename U>
-  void store_aligned(U* dst);
+  void store_aligned(U* dst) {
+    // xsimd widens or narrows during stores, so we need to as well.
+    constexpr size_t DEST_SIZE = sizeof(U) * size;
+    using TargetVecU __attribute__((vector_size(DEST_SIZE))) = U;
+    *reinterpret_cast<TargetVecU*>(dst) = __builtin_convertvector(this->data, TargetVecU);
+  }
 
   template <typename U>
-  void store_unaligned(U* dst);
+  void store_unaligned(U* dst) {
+    // xsimd widens or narrows during stores, so we need to as well.
+    constexpr size_t DEST_SIZE = sizeof(U) * size;
+    using TargetVecU __attribute__((vector_size(DEST_SIZE), aligned(1))) = U;
+    *reinterpret_cast<TargetVecU*>(dst) = __builtin_convertvector(this->data, TargetVecU);
+  }
 
   template <typename U>
-  static batch load_aligned(const U* dst);
+  static batch load_aligned(const U* src) {
+    // xsimd widens or narrows during loads, so we need to as well.
+    constexpr size_t SRC_SIZE = sizeof(U) * size;
+    using SrcVecU __attribute__((vector_size(SRC_SIZE))) = U;
+    auto in = *reinterpret_cast<const SrcVecU*>(src);
+    batch b{};
+    b.data = __builtin_convertvector(in, register_type);
+    return b;
+  }
 
   template <typename U>
-  static batch load_unaligned(const U* dst);
+  static batch load_unaligned(const U* src) {
+    constexpr size_t SRC_SIZE = sizeof(U) * size;
+    using SrcVecU __attribute__((vector_size(SRC_SIZE), aligned(1))) = U;
+    auto in = *reinterpret_cast<const SrcVecU*>(src);
+    batch b{};
+    b.data = __builtin_convertvector(in, register_type);
+    return b;
+  }
 };
 
 ///////////////////////////////
 ///         METHODS         ///
 ///////////////////////////////
 XSIMD_TEMPLATE
-batch<T, A> broadcast(T value);
-
-// XSIMD_TEMPLATE
-// batch<T, A> load_aligned(const void* addr);
-//
-// XSIMD_TEMPLATE
-// batch<T, A> load_unaligned(const void* addr);
+batch<T, A> broadcast(T value) {
+  return batch<T, A>::broadcast(value);
+}
 
 template <class A = default_arch, class From>
-batch<From, A> load_aligned(const From* ptr) noexcept;
+batch<From, A> load_aligned(const From* ptr) noexcept {
+  return batch<From, A>::load_aligned(ptr);
+}
 
 template <class A = default_arch, class From>
-batch<From, A> load_unaligned(const From* ptr) noexcept;
+batch<From, A> load_unaligned(const From* ptr) noexcept {
+  return batch<From, A>::load_unaligned(ptr);
+}
 
 template <typename T, std::size_t N>
 using make_sized_batch_t = batch<T, default_arch>;

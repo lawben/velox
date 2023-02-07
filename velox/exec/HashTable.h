@@ -272,6 +272,8 @@ class BaseHashTable {
     return TagVector(_mm_loadu_si128(reinterpret_cast<__m128i const*>(src)));
 #elif XSIMD_WITH_NEON
     return TagVector(vld1q_u8(src));
+#else
+    return TagVector::load_unaligned(src);
 #endif
   }
 

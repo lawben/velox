@@ -520,7 +520,7 @@ void HashTable<ignoreNullKeys>::joinProbe(HashLookup& lookup) {
   if (hashMode_ == HashMode::kArray) {
     for (auto row : lookup.rows) {
       auto index = lookup.hashes[row];
-      DCHECK_LT(index, capacity_);
+      DCHECK_LT(index, capacity_) << " at row: " << row;
       lookup.hits[row] = table_[index]; // NOLINT
     }
     return;

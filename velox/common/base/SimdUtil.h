@@ -362,8 +362,10 @@ template <typename T, typename A = xsimd::default_arch>
 xsimd::batch<T, A> setAll(T value, const A& = {}) {
   if constexpr (std::is_same_v<T, bool>) {
 #if defined(__aarch64__)
-    return simd::reinterpretBatch<bool>(
+    return xsimd::batch<T, A>(
         xsimd::broadcast<unsigned char, A>(value ? -1 : 0));
+//    return simd::reinterpretBatch<bool>(
+//        xsimd::broadcast<unsigned char, A>(value ? -1 : 0));
 #else
     return xsimd::batch<T, A>(xsimd::broadcast<int64_t, A>(value ? -1 : 0));
 #endif

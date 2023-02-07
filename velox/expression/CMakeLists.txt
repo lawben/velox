@@ -44,6 +44,6 @@ target_link_libraries(
 
 add_subdirectory(type_calculation)
 
+add_subdirectory(tests)
 if(${VELOX_BUILD_TESTING})
-  add_subdirectory(tests)
 endif()

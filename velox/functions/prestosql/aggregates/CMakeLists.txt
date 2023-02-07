@@ -52,9 +52,9 @@ target_link_libraries(
   velox_functions_util
   ${FOLLY_WITH_DEPENDENCIES})
 
-if(${VELOX_BUILD_TESTING})
-  add_subdirectory(tests)
-endif()
+add_subdirectory(tests)
+#if(${VELOX_BUILD_TESTING})
+#endif()
 
 if(${VELOX_ENABLE_BENCHMARKS})
   add_subdirectory(benchmarks)

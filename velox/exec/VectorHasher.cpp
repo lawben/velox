@@ -461,7 +461,7 @@ void VectorHasher::lookupIdsRangeSimd(
   auto bits = rows.asMutableRange().bits();
   bits::forBatches<xsimd::batch<T>::size>(
       bits, rows.begin(), rows.end(), [&](auto index, auto /*mask*/) {
-        auto values = xsimd::batch<T>::load_unaligned(data + index);
+          auto values = xsimd::batch<T>::load_unaligned(data + index);
         uint64_t outOfRange =
             simd::toBitMask(lower > values) | simd::toBitMask(values > upper);
         if (outOfRange) {
