@@ -12,15 +12,24 @@ namespace xsimd {
 
 struct generic {
   constexpr generic() = default;
-
   static constexpr size_t alignment() noexcept {
     return 16;
   }
   static constexpr size_t size() noexcept {
     return 16;
   }
-
   static constexpr auto name() { return "compiler_vec"; }
+};
+
+struct half_vec {
+  constexpr half_vec() = default;
+  static constexpr size_t alignment() noexcept {
+    return 8;
+  }
+  static constexpr size_t size() noexcept {
+    return 8;
+  }
+  static constexpr auto name() { return "half_compiler_vec"; }
 };
 
 using default_arch = generic;
@@ -55,19 +64,23 @@ struct simd_register {
   template <>                                                                  \
   struct has_simd_register<SCALAR_TYPE, ISA> : std::true_type {}
 
-XSIMD_DECLARE_SIMD_REGISTER(signed char, generic);
-XSIMD_DECLARE_SIMD_REGISTER(unsigned char, generic);
-XSIMD_DECLARE_SIMD_REGISTER(char, generic);
-XSIMD_DECLARE_SIMD_REGISTER(short, generic);
-XSIMD_DECLARE_SIMD_REGISTER(unsigned short, generic);
-XSIMD_DECLARE_SIMD_REGISTER(int, generic);
-XSIMD_DECLARE_SIMD_REGISTER(unsigned int, generic);
-XSIMD_DECLARE_SIMD_REGISTER(long int, generic);
-XSIMD_DECLARE_SIMD_REGISTER(unsigned long int, generic);
-XSIMD_DECLARE_SIMD_REGISTER(long long int, generic);
-XSIMD_DECLARE_SIMD_REGISTER(unsigned long long int, generic);
-XSIMD_DECLARE_SIMD_REGISTER(float, generic);
-XSIMD_DECLARE_SIMD_REGISTER(double, generic);
+#define XSIMD_DECLARE_SIMD_REGISTERS(SCALAR_TYPE) \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, generic); \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, half_vec)
+
+XSIMD_DECLARE_SIMD_REGISTERS(signed char);
+XSIMD_DECLARE_SIMD_REGISTERS(unsigned char);
+XSIMD_DECLARE_SIMD_REGISTERS(char);
+XSIMD_DECLARE_SIMD_REGISTERS(short);
+XSIMD_DECLARE_SIMD_REGISTERS(unsigned short);
+XSIMD_DECLARE_SIMD_REGISTERS(int);
+XSIMD_DECLARE_SIMD_REGISTERS(unsigned int);
+XSIMD_DECLARE_SIMD_REGISTERS(long int);
+XSIMD_DECLARE_SIMD_REGISTERS(unsigned long int);
+XSIMD_DECLARE_SIMD_REGISTERS(long long int);
+XSIMD_DECLARE_SIMD_REGISTERS(unsigned long long int);
+XSIMD_DECLARE_SIMD_REGISTERS(float);
+XSIMD_DECLARE_SIMD_REGISTERS(double);
 
 // Cannot declare bool like this. Doing it manually with bool = uint8_t.
 // XSIMD_DECLARE_SIMD_REGISTER(bool, generic);
@@ -210,12 +223,12 @@ struct batch_bool : public types::get_bool_simd_register_t<T, A> {
 
   template <typename U>
   void store_aligned(U* dst) {
-//    *reinterpret_cast<register_type*>(dst) = this->data;
     using batch_type = batch<T, A>;
     alignas(A::alignment()) T buffer[this->size];
     batch_type(*this).store_aligned(&buffer[0]);
-    for (std::size_t i = 0; i < size; ++i)
+    for (std::size_t i = 0; i < size; ++i) {
       dst[i] = bool(buffer[i]);
+    }
   }
 
   void store_unaligned(void* dst) {
@@ -347,6 +360,10 @@ struct batch : public types::simd_register<T, A> {
     return b;
   }
 };
+
+template <typename T>
+struct Batch64 : public batch<T, half_vec> {};
+static_assert(sizeof(Batch64<int>) == 8);
 
 ///////////////////////////////
 ///         METHODS         ///

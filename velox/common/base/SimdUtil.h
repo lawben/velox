@@ -91,13 +91,11 @@ using HalfBatch = typename detail::HalfBatchImpl<T, A>::Type;
 // method names here are to match xsimd::batch, thus not consistent
 // with the rest of Velox.
 template <typename T>
-struct Batch64 {
+struct Batch64 : public xsimd::batch<T, xsimd::half_vec> {
   static constexpr size_t size = [] {
     static_assert(8 % sizeof(T) == 0);
     return 8 / sizeof(T);
   }();
-
-  T data[size];
 
   static Batch64 from(std::initializer_list<T> values) {
     VELOX_DCHECK_EQ(values.size(), size);
@@ -109,17 +107,21 @@ struct Batch64 {
   }
 
   void store_unaligned(T* out) const {
-    std::copy(std::begin(data), std::end(data), out);
+    using DstVecU __attribute__((vector_size(8), aligned(1))) = T;
+    *reinterpret_cast<DstVecU*>(out) = this->data;
   }
 
   static Batch64 load_aligned(const T* mem) {
-    return load_unaligned(mem);
+    Batch64 b{};
+    b.data = *reinterpret_cast<const typename Batch64::register_type*>(mem);
+    return b;
   }
 
   static Batch64 load_unaligned(const T* mem) {
-    Batch64 ans;
-    std::copy(mem, mem + size, ans.data);
-    return ans;
+    using SrcVecU __attribute__((vector_size(8), aligned(1))) = T;
+    Batch64 b{};
+    b.data = *reinterpret_cast<const SrcVecU*>(mem);
+    return b;
   }
 
   friend Batch64 operator+(Batch64 x, T y) {
