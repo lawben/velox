@@ -65,6 +65,7 @@ TEST_F(AssertQueryBuilderTest, config) {
       .assertResults("VALUES (2), (4), (6)");
 }
 
+// TODO(lawben): Failed
 TEST_F(AssertQueryBuilderTest, hiveSplits) {
   auto data = makeRowVector({makeFlatVector<int32_t>({1, 2, 3})});
 

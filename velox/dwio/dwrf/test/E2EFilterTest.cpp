@@ -209,6 +209,7 @@ TEST_F(E2EFilterTest, integerDictionary) {
       true);
 }
 
+// TODO(lawben): Failed
 TEST_F(E2EFilterTest, byteRle) {
   testWithTypes(
       "tiny_val:tinyint,"
@@ -278,6 +279,7 @@ TEST_F(E2EFilterTest, timestamp) {
       true);
 }
 
+// TODO(lawben): Failed
 TEST_F(E2EFilterTest, listAndMap) {
   int numCombinations = 10;
 #ifdef TSAN_BUILD
@@ -297,6 +299,7 @@ TEST_F(E2EFilterTest, listAndMap) {
       numCombinations);
 }
 
+// TODO(lawben): Failed
 TEST_F(E2EFilterTest, nullCompactRanges) {
   // Makes a dataset with nulls at the beginning. Tries different
   // filter ombinations on progressively larger batches. tests for a

@@ -4497,6 +4497,7 @@ TEST_P(TestColumnReader, testMapVectorTypeChange) {
   }
 }
 
+// TODO(lawben): Failed
 TEST_P(SchemaMismatchTest, testBoolean) {
   // set getEncoding
   proto::ColumnEncoding directEncoding;

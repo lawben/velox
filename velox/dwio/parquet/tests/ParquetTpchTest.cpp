@@ -29,6 +29,7 @@ TEST_P(MultiParquetTpchTest, Q1) {
   assertQuery(1);
 }
 
+// TODO(lawben): Failed with SEGFAULT
 TEST_P(MultiParquetTpchTest, Q3) {
   std::vector<uint32_t> sortingKeys{1, 2};
   assertQuery(3, std::move(sortingKeys));

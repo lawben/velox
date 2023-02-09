@@ -76,11 +76,11 @@ struct BitMask<T, A> {
     constexpr int VEC_SIZE = xsimd::batch_bool<T, A>::size;
     using MaskT __attribute__((ext_vector_type(VEC_SIZE))) = bool;
     auto bitmask = __builtin_convertvector(mask.data, MaskT);
-    if constexpr (sizeof(MaskT) < 8) {
+    if constexpr (VEC_SIZE < 8) {
       return reinterpret_cast<uint8_t&>(bitmask);
-    } else if (sizeof(MaskT) == 16) {
+    } else if (VEC_SIZE == 16) {
       return reinterpret_cast<uint16_t&>(bitmask);
-    } else if (sizeof(MaskT) == 32) {
+    } else if (VEC_SIZE == 32) {
       return reinterpret_cast<uint32_t&>(bitmask);
     } else {
       return reinterpret_cast<uint64_t&>(bitmask);
@@ -410,7 +410,9 @@ struct Gather<T, int32_t, A, 4> {
       const T* base,
       VIndexType vindex,
       const xsimd::generic&) {
-    const int32_t* indices = reinterpret_cast<const int32_t*>(vindex.data);
+    constexpr int N = xsimd::batch<T, A>::size;
+    alignas(A::alignment()) int32_t indices[N];
+    vindex.store_aligned(indices);
     return genericMaskGather<T, A, kScale>(src, mask, base, indices);
   }
 };
@@ -552,24 +554,6 @@ struct Permute<T, A, 4> {
       const xsimd::generic&) {
     return genericPermute(data, idx);
   }
-
-#if XSIMD_WITH_AVX2
-  static xsimd::batch<T, A> apply(
-      xsimd::batch<T, A> data,
-      xsimd::batch<int32_t, A> idx,
-      const xsimd::avx2&) {
-    return reinterpret_cast<typename xsimd::batch<T, A>::register_type>(
-        _mm256_permutevar8x32_epi32(reinterpret_cast<__m256i>(data.data), idx));
-  }
-#endif
-
-#if XSIMD_WITH_AVX
-  static HalfBatch<T, A>
-  apply(HalfBatch<T, A> data, HalfBatch<int32_t, A> idx, const xsimd::avx&) {
-    return reinterpret_cast<typename HalfBatch<T, A>::register_type>(
-        _mm_permutevar_ps(reinterpret_cast<__m128>(data.data), idx));
-  }
-#endif
 };
 
 } // namespace detail

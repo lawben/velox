@@ -230,6 +230,7 @@ TEST_F(TpchConnectorTest, multipleSplits) {
   }
 }
 
+// TODO(lawben): Failed
 // Join nation and region.
 TEST_F(TpchConnectorTest, join) {
   auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();

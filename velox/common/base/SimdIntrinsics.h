@@ -18,7 +18,9 @@ struct generic {
   static constexpr size_t size() noexcept {
     return 16;
   }
-  static constexpr auto name() { return "compiler_vec"; }
+  static constexpr auto name() {
+    return "compiler_vec";
+  }
 };
 
 struct half_vec {
@@ -29,7 +31,9 @@ struct half_vec {
   static constexpr size_t size() noexcept {
     return 8;
   }
-  static constexpr auto name() { return "half_compiler_vec"; }
+  static constexpr auto name() {
+    return "half_compiler_vec";
+  }
 };
 
 using default_arch = generic;
@@ -64,7 +68,7 @@ struct simd_register {
   template <>                                                                  \
   struct has_simd_register<SCALAR_TYPE, ISA> : std::true_type {}
 
-#define XSIMD_DECLARE_SIMD_REGISTERS(SCALAR_TYPE) \
+#define XSIMD_DECLARE_SIMD_REGISTERS(SCALAR_TYPE)    \
   XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, generic); \
   XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, half_vec)
 
@@ -95,7 +99,6 @@ struct simd_register<bool, generic> {
 };
 template <>
 struct has_simd_register<bool, generic> : std::true_type {};
-
 
 template <class T, class Arch>
 struct get_bool_simd_register {
@@ -167,47 +170,48 @@ struct batch_bool : public types::get_bool_simd_register_t<T, A> {
 
   batch_bool() = default;
   batch_bool(bool val) noexcept {
-      this->data = val - register_type{};
+    T initVal = val ? -1 : 0;
+    this->data = initVal - register_type{};
   }
 
   batch_bool(register_type reg) noexcept {
-      this->data = reg;
+    this->data = reg;
   }
   batch_bool(batch_type batch) noexcept {
-      this->data = batch.data;
+    this->data = batch.data;
   }
-//  template <class... Ts>
-//  batch_bool(bool val0, bool val1, Ts... vals) noexcept;
+  //  template <class... Ts>
+  //  batch_bool(bool val0, bool val1, Ts... vals) noexcept;
 
   // comparison operators
   batch_bool operator==(const batch_bool& other) const noexcept {
-      return this->data == other.data;
+    return this->data == other.data;
   }
   batch_bool operator!=(const batch_bool& other) const noexcept {
-      return this->data != other.data;
+    return this->data != other.data;
   }
 
   // logical operators
   batch_bool operator~() const noexcept {
-      return ~this->data;
+    return ~this->data;
   }
   batch_bool operator!() const noexcept {
-      return !this->data;
+    return !this->data;
   }
   batch_bool operator&(const batch_bool& other) const noexcept {
-      return this->data & other.data;
+    return this->data & other.data;
   }
   batch_bool operator|(const batch_bool& other) const noexcept {
-      return this->data | other.data;
+    return this->data | other.data;
   }
   batch_bool operator^(const batch_bool& other) const noexcept {
-      return this->data ^ other.data;
+    return this->data ^ other.data;
   }
   batch_bool operator&&(const batch_bool& other) const noexcept {
-      return this->data && other.data;
+    return this->data && other.data;
   }
   batch_bool operator||(const batch_bool& other) const noexcept {
-      return this->data || other.data;
+    return this->data || other.data;
   }
 
   // update operators
@@ -317,7 +321,9 @@ struct batch : public types::simd_register<T, A> {
     return this->data >> other.data;
   }
 
-  T get(size_t pos) { return this->data[pos]; }
+  T get(size_t pos) {
+    return this->data[pos];
+  }
 
   static batch broadcast(T value) {
     return batch(value);
@@ -328,7 +334,8 @@ struct batch : public types::simd_register<T, A> {
     // xsimd widens or narrows during stores, so we need to as well.
     constexpr size_t DEST_SIZE = sizeof(U) * size;
     using TargetVecU __attribute__((vector_size(DEST_SIZE))) = U;
-    *reinterpret_cast<TargetVecU*>(dst) = __builtin_convertvector(this->data, TargetVecU);
+    *reinterpret_cast<TargetVecU*>(dst) =
+        __builtin_convertvector(this->data, TargetVecU);
   }
 
   template <typename U>
@@ -336,7 +343,8 @@ struct batch : public types::simd_register<T, A> {
     // xsimd widens or narrows during stores, so we need to as well.
     constexpr size_t DEST_SIZE = sizeof(U) * size;
     using TargetVecU __attribute__((vector_size(DEST_SIZE), aligned(1))) = U;
-    *reinterpret_cast<TargetVecU*>(dst) = __builtin_convertvector(this->data, TargetVecU);
+    *reinterpret_cast<TargetVecU*>(dst) =
+        __builtin_convertvector(this->data, TargetVecU);
   }
 
   template <typename U>

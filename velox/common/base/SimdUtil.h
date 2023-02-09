@@ -180,7 +180,10 @@ template <
 xsimd::batch<T, A>
 gather(const T* base, Batch64<IndexType> vindex, const A& arch = {}) {
   using Impl = detail::Gather<T, IndexType, A>;
-  return Impl::template apply<kScale>(base, vindex.data, arch);
+  constexpr int N = Batch64<IndexType>::size;
+  alignas(Batch64<IndexType>::arch_type::alignment()) IndexType indices[N];
+  vindex.store_aligned(indices);
+  return Impl::template apply<kScale>(base, indices, arch);
 }
 
 // Same as 'gather' above except the indices are read from memory.
@@ -225,7 +228,10 @@ xsimd::batch<T, A> maskGather(
     Batch64<IndexType> vindex,
     const A& arch = {}) {
   using Impl = detail::Gather<T, IndexType, A>;
-  return Impl::template maskApply<kScale>(src, mask, base, vindex.data, arch);
+  constexpr int N = Batch64<IndexType>::size;
+  alignas(Batch64<IndexType>::arch_type::alignment()) IndexType indices[N];
+  vindex.store_aligned(indices);
+  return Impl::template maskApply<kScale>(src, mask, base, indices, arch);
 }
 
 // Same as 'maskGather' above but read indices from memory.
