@@ -276,6 +276,15 @@ BENCHMARK(q22) {
   benchmark.run(planContext);
 }
 
+/**
+ * Current run config:
+  --num_drivers=4 --minloglevel=5 --bm_min_iters=1
+  --bm_regex="q1$|q2$|q3|q10|q11|q12|q13|q14|q15|q16|q17|q18|q19|q20|q21"
+  --data_path=tpch-parquet-sf1
+
+  Benchmarks not in regex crash because of wrong data types.
+ */
+
 int main(int argc, char** argv) {
   folly::init(&argc, &argv, false);
   benchmark.initialize();

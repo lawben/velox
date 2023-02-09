@@ -16,15 +16,6 @@
 
 #include <numeric>
 
-#if XSIMD_WITH_NEON
-namespace xsimd::types {
-XSIMD_DECLARE_SIMD_REGISTER(
-    bool,
-    neon,
-    detail::neon_vector_type<unsigned char>);
-} // namespace xsimd::types
-#endif
-
 namespace facebook::velox::simd {
 
 namespace detail {
@@ -306,13 +297,21 @@ xsimd::batch<T, A> genericGather(const T* base, const IndexType* indices) {
   constexpr int N = xsimd::batch<T, A>::size;
   using IndexVecT = typename xsimd::batch<IndexType>::register_type;
 
-  auto bytes = reinterpret_cast<const char*>(base);
-  auto idx = *reinterpret_cast<const IndexVecT*>(indices) * kScale;
+  auto idxs = *reinterpret_cast<const IndexVecT*>(indices);
 
   xsimd::batch<T, A> res;
-  for (size_t i = 0; i < N; ++i) {
-    res.data[i] = *(bytes + idx[i]);
+  if constexpr (kScale == sizeof(T)) {
+    for (int i = 0; i < N; ++i) {
+      res.data[i] = *(base + idxs[i]);
+    }
+  } else {
+    const auto* bytes = reinterpret_cast<const char*>(base);
+    idxs *= kScale;
+    for (int i = 0; i < N; ++i) {
+      res.data[i] = *reinterpret_cast<const T*>(bytes + idxs[i]);
+    }
   }
+
   return res;
 }
 
@@ -338,7 +337,7 @@ xsimd::batch<T, A> genericMaskGather(
     const auto* bytes = reinterpret_cast<const char*>(base);
     idxs *= kScale;
     for (int i = 0; i < N; ++i) {
-      gathered.data[i] = *(bytes + idxs[i]);
+      gathered.data[i] = *reinterpret_cast<const T*>(bytes + idxs[i]);
     }
   }
 

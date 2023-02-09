@@ -244,7 +244,7 @@ struct batch_bool : public types::get_bool_simd_register_t<T, A> {
     batch_type ref{0};
     alignas(A::alignment()) T buffer[size];
     for (std::size_t i = 0; i < size; ++i)
-      buffer[i] = src[i] ? 1 : 0;
+      buffer[i] = src[i] ? -1 : 0;
     return ref != batch_type::load_aligned(&buffer[0]);
   }
 
