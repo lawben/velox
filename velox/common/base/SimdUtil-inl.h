@@ -68,6 +68,9 @@ struct BitMask<T, A> {
     using MaskT __attribute__((ext_vector_type(VEC_SIZE))) = bool;
     auto bitmask = __builtin_convertvector(mask.data, MaskT);
     if constexpr (VEC_SIZE < 8) {
+      uint8_t scalar_bitmask = reinterpret_cast<uint8_t&>(bitmask);
+      return scalar_bitmask & ((1 << VEC_SIZE) - 1); // clear unused high bits
+    } else if (VEC_SIZE == 8) {
       return reinterpret_cast<uint8_t&>(bitmask);
     } else if (VEC_SIZE == 16) {
       return reinterpret_cast<uint16_t&>(bitmask);
@@ -295,7 +298,9 @@ namespace detail {
 template <typename T, typename A, int kScale, typename IndexType>
 xsimd::batch<T, A> genericGather(const T* base, const IndexType* indices) {
   constexpr int N = xsimd::batch<T, A>::size;
-  using IndexVecT = typename xsimd::batch<IndexType>::register_type;
+
+  constexpr int INDEX_VEC_SIZE = N * sizeof(IndexType);
+  using IndexVecT __attribute__((vector_size(INDEX_VEC_SIZE))) = IndexType;
 
   auto idxs = *reinterpret_cast<const IndexVecT*>(indices);
 

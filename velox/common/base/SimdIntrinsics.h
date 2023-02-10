@@ -2,7 +2,13 @@
 
 #include <cstdint>
 
+#ifdef __aarch64__
 #include <arm_neon.h>
+#endif
+
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
 
 #define XSIMD_TEMPLATE template <typename T, typename A = default_arch>
 
@@ -52,8 +58,6 @@ struct simd_register {
   struct register_type {};
   register_type data;
 };
-
-//    using vector_type __attribute__((vector_size(16))) = SCALAR_TYPE;
 
 #define XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, ISA)                          \
   template <>                                                                  \
@@ -136,14 +140,14 @@ template <size_t S>
 using get_unsigned_type_t = typename get_unsigned_type<S>::type;
 
 template <class T, class A>
-struct neon_bool_simd_register {
+struct bool_simd_register {
   using type = simd_register<get_unsigned_type_t<sizeof(T)>, A>;
 };
 } // namespace detail
 
 template <class T>
 struct get_bool_simd_register<T, generic>
-    : detail::neon_bool_simd_register<T, generic> {};
+    : detail::bool_simd_register<T, generic> {};
 
 } // namespace types
 
