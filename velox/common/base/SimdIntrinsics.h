@@ -16,8 +16,8 @@
 
 namespace xsimd {
 
-struct generic {
-  constexpr generic() = default;
+struct generic16 {
+  constexpr generic16() = default;
   static constexpr size_t alignment() noexcept {
     return 16;
   }
@@ -28,6 +28,29 @@ struct generic {
     return "compiler_vec";
   }
 };
+
+struct generic32 {
+  // TODO(lawben): Not sure this is correct
+  constexpr generic32(const generic16&) {};
+  constexpr generic32() = default;
+  static constexpr size_t alignment() noexcept {
+    return 32;
+  }
+  static constexpr size_t size() noexcept {
+    return 32;
+  }
+  static constexpr auto name() {
+    return "compiler_vec";
+  }
+};
+
+
+#define USING_32_BYTE_VECTOR
+
+struct avx : public generic32 {};
+struct avx2 : public generic32 {};
+struct sse2 : public generic16 {};
+struct neon : public generic16 {};
 
 struct half_vec {
   constexpr half_vec() = default;
@@ -42,6 +65,7 @@ struct half_vec {
   }
 };
 
+using generic = generic32;
 using default_arch = generic;
 
 ///////////////////////////////
@@ -73,7 +97,12 @@ struct simd_register {
   struct has_simd_register<SCALAR_TYPE, ISA> : std::true_type {}
 
 #define XSIMD_DECLARE_SIMD_REGISTERS(SCALAR_TYPE)    \
-  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, generic); \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, generic16); \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, generic32); \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, avx); \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, avx2); \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, sse2); \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, neon); \
   XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, half_vec)
 
 XSIMD_DECLARE_SIMD_REGISTERS(signed char);
@@ -154,17 +183,12 @@ struct get_bool_simd_register<T, generic>
 XSIMD_TEMPLATE
 struct has_simd_register : types::has_simd_register<T, A> {};
 
-struct avx {};
-struct avx2 {};
-struct sse2 {};
-struct neon {};
-
 XSIMD_TEMPLATE
 struct batch;
 
 XSIMD_TEMPLATE
 struct batch_bool : public types::get_bool_simd_register_t<T, A> {
-  static constexpr size_t size = 16 / sizeof(T);
+  static constexpr size_t size = A::size() / sizeof(T);
 
   using base_type = types::get_bool_simd_register_t<T, A>;
   using value_type = bool;

@@ -169,7 +169,10 @@ xsimd::batch<T, A> gather(
     xsimd::batch<IndexType, IndexArch> vindex,
     const A& arch = {}) {
   using Impl = detail::Gather<T, IndexType, A>;
-  return Impl::template apply<kScale>(base, vindex, arch);
+  constexpr int N = xsimd::batch<T>::size;
+  alignas(A::alignment()) IndexType indices[N];
+  vindex.store_aligned(indices);
+  return Impl::template apply<kScale>(base, indices, arch);
 }
 
 template <
@@ -213,7 +216,10 @@ xsimd::batch<T, A> maskGather(
     xsimd::batch<IndexType, IndexArch> vindex,
     const A& arch = {}) {
   using Impl = detail::Gather<T, IndexType, A>;
-  return Impl::template maskApply<kScale>(src, mask, base, vindex, arch);
+  constexpr int N = xsimd::batch<T>::size;
+  alignas(Batch64<IndexType>::arch_type::alignment()) IndexType indices[N];
+  vindex.store_aligned(indices);
+  return Impl::template maskApply<kScale>(src, mask, base, indices, arch);
 }
 
 template <
@@ -340,9 +346,21 @@ template <
     bool kSecond,
     typename From,
     typename A = xsimd::default_arch>
-xsimd::batch<To, A> getHalf(xsimd::batch<From, A> data, const A& arch = {}) {
-  return detail::GetHalf<To, From, A>::template apply<kSecond>(data, arch);
+auto getHalf(xsimd::batch<From, A> data, const A& arch = {}) {
+  if constexpr (std::is_same_v<To, From>) {
+    return detail::GetHalf<To, From, A>::template applySame<kSecond>(data, arch);
+  } else {
+    return detail::GetHalf<To, From, A>::template apply<kSecond>(data, arch);
+  }
 }
+
+//template <
+//    typename T,
+//    bool kSecond,
+//    typename A = xsimd::default_arch>
+//HalfBatch<T, A> getHalf(xsimd::batch<T, A> data, const A& arch = {}) {
+//  return detail::GetHalf<T, T, A>::template apply<kSecond>(data, arch);
+//}
 
 namespace detail {
 template <typename T, typename A>

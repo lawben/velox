@@ -683,11 +683,16 @@ inline xsimd::batch<int64_t> cvtU32toI64(simd::Batch64<int32_t> values) {
   return xsimd::batch<int64_t>(lo, hi);
 }
 #else
-inline xsimd::batch<int64_t> cvtU32toI64(simd::Batch64<int32_t> values) {
-  int64_t lo = static_cast<uint32_t>(values.data[0]);
-  int64_t hi = static_cast<uint32_t>(values.data[1]);
-  return xsimd::batch<int64_t>(lo, hi);
+
+inline xsimd::batch<int64_t> cvtU32toI64(simd::HalfBatch<int32_t> values) {
+  return __builtin_convertvector(values.data, xsimd::batch<int64_t>::register_type);
 }
+
+//inline xsimd::batch<int64_t> cvtU32toI64(xsimd::batch<int32_t> values) {
+//  int64_t lo = static_cast<uint32_t>(values.data[0]);
+//  int64_t hi = static_cast<uint32_t>(values.data[1]);
+//  return xsimd::batch<int64_t>(lo, hi);
+//}
 #endif
 
 } // namespace detail
