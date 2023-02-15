@@ -217,7 +217,7 @@ xsimd::batch<T, A> maskGather(
     const A& arch = {}) {
   using Impl = detail::Gather<T, IndexType, A>;
   constexpr int N = xsimd::batch<T>::size;
-  alignas(Batch64<IndexType>::arch_type::alignment()) IndexType indices[N];
+  alignas(A::alignment()) IndexType indices[N];
   vindex.store_aligned(indices);
   return Impl::template maskApply<kScale>(src, mask, base, indices, arch);
 }

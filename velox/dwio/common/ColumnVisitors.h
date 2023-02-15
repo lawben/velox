@@ -533,21 +533,11 @@ struct LoadIndices<int16_t, A> {
       const int16_t* values,
       const xsimd::generic&) {
     constexpr int N = xsimd::batch<int32_t, A>::size;
-    alignas(A::alignment()) int32_t tmp[N];
-    for (int i = 0; i < N; ++i) {
-      tmp[i] = values[i];
-    }
-    return xsimd::load_aligned(tmp);
+    using ValVecT __attribute__((vector_size(N * sizeof(uint16_t)))) = uint16_t;
+    auto vals = *reinterpret_cast<const ValVecT*>(values);
+    return __builtin_convertvector(
+        vals, typename xsimd::batch<int32_t, A>::register_type);
   }
-
-#if XSIMD_WITH_AVX2
-  static xsimd::batch<int32_t, A> apply(
-      const int16_t* values,
-      const xsimd::avx2&) {
-    return _mm256_cvtepi16_epi32(
-        _mm_loadu_si128(reinterpret_cast<const __m128i*>(values)));
-  }
-#endif
 };
 
 template <typename A>
@@ -671,29 +661,10 @@ inline void storeTranslate(
 
 namespace detail {
 
-#if XSIMD_WITH_AVX2
-inline xsimd::batch<int64_t> cvtU32toI64(
-    xsimd::batch<int32_t, xsimd::sse2> values) {
-  return _mm256_cvtepu32_epi64(values);
-}
-#elif XSIMD_WITH_SSE2 || XSIMD_WITH_NEON
-inline xsimd::batch<int64_t> cvtU32toI64(simd::Batch64<int32_t> values) {
-  int64_t lo = static_cast<uint32_t>(values.data[0]);
-  int64_t hi = static_cast<uint32_t>(values.data[1]);
-  return xsimd::batch<int64_t>(lo, hi);
-}
-#else
-
 inline xsimd::batch<int64_t> cvtU32toI64(simd::HalfBatch<int32_t> values) {
-  return __builtin_convertvector(values.data, xsimd::batch<int64_t>::register_type);
+  return __builtin_convertvector(
+      values.data, xsimd::batch<int64_t>::register_type);
 }
-
-//inline xsimd::batch<int64_t> cvtU32toI64(xsimd::batch<int32_t> values) {
-//  int64_t lo = static_cast<uint32_t>(values.data[0]);
-//  int64_t hi = static_cast<uint32_t>(values.data[1]);
-//  return xsimd::batch<int64_t>(lo, hi);
-//}
-#endif
 
 } // namespace detail
 

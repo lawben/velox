@@ -296,13 +296,18 @@ void memset(void* to, char data, int32_t bytes, const A& arch) {
 namespace detail {
 
 template <typename T, typename A>
+struct HalfBatchImpl<T, A, std::enable_if_t<A::size() == 16>> {
+  using Type = Batch64<T>;
+};
+
+template <typename T, typename A>
 struct HalfBatchImpl<T, A, std::enable_if_t<A::size() == 32>> {
   using Type = xsimd::batch<T, xsimd::generic16>;
 };
 
 template <typename T, typename A>
-struct HalfBatchImpl<T, A, std::enable_if_t<A::size() == 16>> {
-  using Type = Batch64<T>;
+struct HalfBatchImpl<T, A, std::enable_if_t<A::size() == 64>> {
+  using Type = xsimd::batch<T, xsimd::generic32>;
 };
 
 // Works reasonably well: https://godbolt.org/z/b8os9s8Er
@@ -377,12 +382,6 @@ struct Gather<T, int32_t, A, 4> {
 
   static VIndexType loadIndices(const int32_t* indices, const xsimd::generic&) {
     return xsimd::load_unaligned<A>(indices);
-  }
-
-  template <int kScale>
-  static xsimd::batch<T, A>
-  apply(const T* base, const int32_t* indices, const xsimd::avx2& arch) {
-    return apply<kScale>(base, loadIndices(indices, arch), arch);
   }
 
   template <int kScale>

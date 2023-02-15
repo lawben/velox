@@ -25,12 +25,11 @@ struct generic16 {
     return 16;
   }
   static constexpr auto name() {
-    return "compiler_vec";
+    return "compiler_vec16";
   }
 };
 
 struct generic32 {
-  // TODO(lawben): Not sure this is correct
   constexpr generic32(const generic16&) {};
   constexpr generic32() = default;
   static constexpr size_t alignment() noexcept {
@@ -40,16 +39,30 @@ struct generic32 {
     return 32;
   }
   static constexpr auto name() {
-    return "compiler_vec";
+    return "compiler_vec32";
+  }
+};
+
+struct generic64 {
+  constexpr generic64() = default;
+  static constexpr size_t alignment() noexcept {
+    return 64;
+  }
+  static constexpr size_t size() noexcept {
+    return 64;
+  }
+  static constexpr auto name() {
+    return "compiler_vec64";
   }
 };
 
 
 #define USING_32_BYTE_VECTOR
 
+struct sse2 : public generic16 {};
 struct avx : public generic32 {};
 struct avx2 : public generic32 {};
-struct sse2 : public generic16 {};
+struct avx512 : public generic64 {};
 struct neon : public generic16 {};
 
 struct half_vec {
@@ -99,9 +112,11 @@ struct simd_register {
 #define XSIMD_DECLARE_SIMD_REGISTERS(SCALAR_TYPE)    \
   XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, generic16); \
   XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, generic32); \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, generic64); \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, sse2); \
   XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, avx); \
   XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, avx2); \
-  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, sse2); \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, avx512); \
   XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, neon); \
   XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, half_vec)
 
