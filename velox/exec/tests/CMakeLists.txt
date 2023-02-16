@@ -99,6 +99,7 @@ target_link_libraries(
   gtest
   gtest_main
   gmock
+  atomic
   ${FOLLY_WITH_DEPENDENCIES}
   ${DOUBLE_CONVERSION}
   ${gflags_LIBRARIES}
