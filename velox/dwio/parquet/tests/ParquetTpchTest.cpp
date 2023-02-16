@@ -25,9 +25,9 @@ class MultiParquetTpchTest
   MultiParquetTpchTest() : ParquetTpchTestBase(GetParam()) {}
 };
 
-//TEST_P(MultiParquetTpchTest, Q1) {
-//  assertQuery(1);
-//}
+TEST_P(MultiParquetTpchTest, Q1) {
+  assertQuery(1);
+}
 
 // TODO(lawben): Failed with SEGFAULT
 TEST_P(MultiParquetTpchTest, Q3) {

@@ -670,11 +670,21 @@ struct GetHalf {
       const xsimd::generic&) {
     constexpr int N = xsimd::batch<SourceT, A>::size;
     constexpr int HalfN = N / 2;
+
     using HalfT __attribute__((vector_size(HalfN * sizeof(SourceT)))) = SourceT;
+    HalfT* half = reinterpret_cast<HalfT*>(&data) + kSecond;
     using TargetVecT __attribute__((vector_size(HalfN * sizeof(TargetT)))) =
         TargetT;
-    HalfT* half = reinterpret_cast<HalfT*>(&data) + kSecond;
-    return __builtin_convertvector(*half, TargetVecT);
+
+    // Kinda hacky, but this is what the original code expects.
+    if constexpr (std::is_same_v<SourceT, int32_t> && std::is_same_v<TargetT, uint64_t>) {
+      using UnsignedSourceT __attribute__((vector_size(HalfN * sizeof(SourceT)))) = uint32_t;
+      auto reinterpret_unsigned = reinterpret_cast<UnsignedSourceT&>(*half);
+      return __builtin_convertvector(reinterpret_unsigned, TargetVecT);
+    } else {
+      return __builtin_convertvector(*half, TargetVecT);
+    }
+
   }
 
   // SourceT == TargetT
