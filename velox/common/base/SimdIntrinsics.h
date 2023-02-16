@@ -30,7 +30,7 @@ struct generic16 {
 };
 
 struct generic32 {
-  constexpr generic32(const generic16&) {};
+  constexpr generic32(const generic16&){};
   constexpr generic32() = default;
   static constexpr size_t alignment() noexcept {
     return 32;
@@ -55,7 +55,6 @@ struct generic64 {
     return "compiler_vec64";
   }
 };
-
 
 #define USING_32_BYTE_VECTOR
 
@@ -109,15 +108,15 @@ struct simd_register {
   template <>                                                                  \
   struct has_simd_register<SCALAR_TYPE, ISA> : std::true_type {}
 
-#define XSIMD_DECLARE_SIMD_REGISTERS(SCALAR_TYPE)    \
+#define XSIMD_DECLARE_SIMD_REGISTERS(SCALAR_TYPE)      \
   XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, generic16); \
   XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, generic32); \
   XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, generic64); \
-  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, sse2); \
-  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, avx); \
-  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, avx2); \
-  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, avx512); \
-  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, neon); \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, sse2);      \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, avx);       \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, avx2);      \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, avx512);    \
+  XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, neon);      \
   XSIMD_DECLARE_SIMD_REGISTER(SCALAR_TYPE, half_vec)
 
 XSIMD_DECLARE_SIMD_REGISTERS(signed char);
@@ -274,7 +273,16 @@ struct batch_bool : public types::get_bool_simd_register_t<T, A> {
     alignas(A::alignment()) T buffer[this->size];
     batch_type(*this).store_aligned(&buffer[0]);
     for (std::size_t i = 0; i < size; ++i) {
-      dst[i] = bool(buffer[i]);
+      constexpr size_t MSB_SHIFT = (sizeof(T) * 8) - 1;
+      if constexpr (sizeof(T) == 1) {
+        dst[i] = *reinterpret_cast<uint8_t*>(&buffer[i]) >> MSB_SHIFT;
+      } else if (sizeof(T) == 2) {
+        dst[i] = *reinterpret_cast<uint16_t*>(&buffer[i]) >> MSB_SHIFT;
+      } else if (sizeof(T) == 4) {
+        dst[i] = *reinterpret_cast<uint32_t*>(&buffer[i]) >> MSB_SHIFT;
+      } else if (sizeof(T) == 8) {
+        dst[i] = *reinterpret_cast<uint64_t*>(&buffer[i]) >> MSB_SHIFT;
+      }
     }
   }
 

@@ -65,6 +65,7 @@ struct BitMask<T, A> {
     //        int lo = std::accumulate(mask_arr.begin(), mask_arr.begin() + 8,
     //        0); int hi = std::accumulate(mask_arr.begin() + 8, mask_arr.end(),
     //        0); return (hi << 8) | lo;
+    return genericToBitMask(mask);
     constexpr int VEC_SIZE = xsimd::batch_bool<T, A>::size;
     using MaskT __attribute__((ext_vector_type(VEC_SIZE))) = bool;
     auto bitmask = __builtin_convertvector(mask.data, MaskT);
@@ -316,6 +317,7 @@ xsimd::batch<T, A> genericGather(const T* base, const IndexType* indices) {
   constexpr int N = xsimd::batch<T, A>::size;
 
   constexpr int INDEX_VEC_SIZE = N * sizeof(IndexType);
+  // TODO! this must be unaligned. check all T* indices usages!!!
   using IndexVecT __attribute__((vector_size(INDEX_VEC_SIZE))) = IndexType;
 
   auto idxs = *reinterpret_cast<const IndexVecT*>(indices);
