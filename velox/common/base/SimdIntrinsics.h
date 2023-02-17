@@ -220,7 +220,10 @@ struct batch_bool : public types::get_bool_simd_register_t<T, A> {
     this->data = reg;
   }
   batch_bool(batch_type batch) noexcept {
-    this->data = batch.data;
+    // To process batch_bools the same way as done explicitly for AVX and NEON,
+    // we only need to keep the most significant bit of each value.
+    constexpr size_t MSB_SHIFT = (sizeof(T) * 8) - 1;
+    this->data = batch.data >> MSB_SHIFT;
   }
   //  template <class... Ts>
   //  batch_bool(bool val0, bool val1, Ts... vals) noexcept;
@@ -273,16 +276,7 @@ struct batch_bool : public types::get_bool_simd_register_t<T, A> {
     alignas(A::alignment()) T buffer[this->size];
     batch_type(*this).store_aligned(&buffer[0]);
     for (std::size_t i = 0; i < size; ++i) {
-      constexpr size_t MSB_SHIFT = (sizeof(T) * 8) - 1;
-      if constexpr (sizeof(T) == 1) {
-        dst[i] = *reinterpret_cast<uint8_t*>(&buffer[i]) >> MSB_SHIFT;
-      } else if (sizeof(T) == 2) {
-        dst[i] = *reinterpret_cast<uint16_t*>(&buffer[i]) >> MSB_SHIFT;
-      } else if (sizeof(T) == 4) {
-        dst[i] = *reinterpret_cast<uint32_t*>(&buffer[i]) >> MSB_SHIFT;
-      } else if (sizeof(T) == 8) {
-        dst[i] = *reinterpret_cast<uint64_t*>(&buffer[i]) >> MSB_SHIFT;
-      }
+      dst[i] = static_cast<bool>(buffer[i]);
     }
   }
 

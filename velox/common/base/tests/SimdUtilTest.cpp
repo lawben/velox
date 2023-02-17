@@ -127,6 +127,22 @@ TEST_F(SimdUtilTest, bitIndices) {
   testIndices(999);
 }
 
+TEST_F(SimdUtilTest, BitMaskFromNonComparisonBoolBatch) {
+  xsimd::batch<int> cache = {
+      1082163328,
+      1077969024,
+      1077952640,
+      1077952576,
+      1077952576,
+      1077952576,
+      1077952576,
+      1077952576};
+  auto a = simd::reinterpretBatch<uint32_t>(cache);
+  auto b = xsimd::batch_bool<uint32_t>(a);
+  auto passed = simd::toBitMask(b);
+  EXPECT_EQ(passed, 0);
+}
+
 TEST_F(SimdUtilTest, gather32) {
   int32_t indices8[8] = {7, 6, 5, 4, 3, 2, 1, 0};
   int32_t indices6[8] = {7, 6, 5, 4, 3, 2, 1 << 31, 1 << 31};

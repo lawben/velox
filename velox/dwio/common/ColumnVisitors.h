@@ -533,7 +533,9 @@ struct LoadIndices<int16_t, A> {
       const int16_t* values,
       const xsimd::generic&) {
     constexpr int N = xsimd::batch<int32_t, A>::size;
-    using ValVecT __attribute__((vector_size(N * sizeof(uint16_t)))) = uint16_t;
+    using ValVecT
+        __attribute__((vector_size(N * sizeof(uint16_t)), aligned(1))) =
+            uint16_t;
     auto vals = *reinterpret_cast<const ValVecT*>(values);
     return __builtin_convertvector(
         vals, typename xsimd::batch<int32_t, A>::register_type);

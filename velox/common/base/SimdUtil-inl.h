@@ -56,6 +56,7 @@ struct BitMask<T, A> {
   static constexpr int kAllSet = bits::lowMask(xsimd::batch_bool<T, A>::size);
 
   static int toBitMask(xsimd::batch_bool<T, A> mask, const xsimd::generic&) {
+    // Generic GCC version
     //        alignas(A::alignment()) static const uint8_t kAnd[] = {
     //            1, 2, 4, 8, 16, 32, 64, 128, 1, 2, 4, 8, 16, 32, 64, 128};
     //        auto vAnd = xsimd::batch<T, A>::load_aligned(kAnd);
@@ -65,7 +66,7 @@ struct BitMask<T, A> {
     //        int lo = std::accumulate(mask_arr.begin(), mask_arr.begin() + 8,
     //        0); int hi = std::accumulate(mask_arr.begin() + 8, mask_arr.end(),
     //        0); return (hi << 8) | lo;
-    return genericToBitMask(mask);
+
     constexpr int VEC_SIZE = xsimd::batch_bool<T, A>::size;
     using MaskT __attribute__((ext_vector_type(VEC_SIZE))) = bool;
     auto bitmask = __builtin_convertvector(mask.data, MaskT);
