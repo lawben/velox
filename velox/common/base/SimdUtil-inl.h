@@ -314,42 +314,38 @@ struct HalfBatchImpl<T, A, std::enable_if_t<A::size() == 64>> {
 
 // Works reasonably well: https://godbolt.org/z/b8os9s8Er
 template <typename T, typename A, int kScale, typename IndexType>
-xsimd::batch<T, A> genericGather(const T* base, const IndexType* indices) {
+xsimd::batch<T, A> genericGather(
+    const T* base,
+    xsimd::batch<IndexType, A> indices) {
   constexpr int N = xsimd::batch<T, A>::size;
-
-  constexpr int INDEX_VEC_SIZE = N * sizeof(IndexType);
-  // TODO! this must be unaligned. check all T* indices usages!!!
-  using IndexVecT __attribute__((vector_size(INDEX_VEC_SIZE))) = IndexType;
-
-  auto idxs = *reinterpret_cast<const IndexVecT*>(indices);
 
   xsimd::batch<T, A> res;
   if constexpr (kScale == sizeof(T)) {
     for (int i = 0; i < N; ++i) {
-      res.data[i] = *(base + idxs[i]);
+      res.data[i] = *(base + indices.data[i]);
     }
   } else {
     const auto* bytes = reinterpret_cast<const char*>(base);
-    idxs *= kScale;
+    indices = indices * kScale;
     for (int i = 0; i < N; ++i) {
-      res.data[i] = *reinterpret_cast<const T*>(bytes + idxs[i]);
+      res.data[i] = *reinterpret_cast<const T*>(bytes + indices.data[i]);
     }
   }
 
   return res;
 }
 
-template <typename T, typename A, int kScale, typename IndexType>
+template <typename T, typename A, int kScale, typename IndexType, typename IdxA>
 xsimd::batch<T, A> genericMaskGather(
     xsimd::batch<T, A> src,
     xsimd::batch_bool<T, A> mask,
     const T* base,
-    const IndexType* indices) {
+    xsimd::batch<IndexType, IdxA> vindex) {
   constexpr int N = xsimd::batch<T, A>::size;
   constexpr int IndexVecSize = N * sizeof(IndexType);
-  using IndexVecT __attribute__((vector_size(IndexVecSize))) = IndexType;
+  using IndexVecT = typename xsimd::batch<IndexType, IdxA>::register_type;
 
-  auto idxs = *reinterpret_cast<const IndexVecT*>(indices);
+  auto idxs = vindex.data;
   idxs = __builtin_convertvector(mask.data, IndexVecT) ? idxs : IndexVecT{};
 
   xsimd::batch<T, A> gathered;
@@ -389,16 +385,15 @@ struct Gather<T, int32_t, A, 4> {
 
   template <int kScale>
   static xsimd::batch<T, A>
-  apply(const T* base, const int32_t* indices, const xsimd::generic&) {
-    return genericGather<T, A, kScale>(base, indices);
+  apply(const T* base, VIndexType vindex, const xsimd::generic&) {
+    return genericGather<T, A, kScale>(base, vindex);
   }
 
   template <int kScale>
   static xsimd::batch<T, A>
-  apply(const T* base, VIndexType vindex, const xsimd::generic&) {
-    alignas(A::alignment()) int32_t indices[vindex.size];
-    vindex.store_aligned(indices);
-    return genericGather<T, A, kScale>(base, indices);
+  apply(const T* base, const int32_t* indices, const xsimd::generic&) {
+    auto vindex = VIndexType::load_unaligned(indices);
+    return apply<kScale>(base, vindex, A{});
   }
 
   template <int kScale>
@@ -408,7 +403,8 @@ struct Gather<T, int32_t, A, 4> {
       const T* base,
       const int32_t* indices,
       const xsimd::generic&) {
-    return genericMaskGather<T, A, kScale>(src, mask, base, indices);
+    return genericMaskGather<T, A, kScale>(
+        src, mask, base, loadIndices(indices, A{}));
   }
 
   template <int kScale>
@@ -418,10 +414,7 @@ struct Gather<T, int32_t, A, 4> {
       const T* base,
       VIndexType vindex,
       const xsimd::generic&) {
-    constexpr int N = xsimd::batch<T, A>::size;
-    alignas(A::alignment()) int32_t indices[N];
-    vindex.store_aligned(indices);
-    return genericMaskGather<T, A, kScale>(src, mask, base, indices);
+    return genericMaskGather<T, A, kScale>(src, mask, base, vindex);
   }
 };
 
@@ -433,20 +426,19 @@ struct Gather<T, int32_t, A, 8> {
     return HalfBatch<int32_t>::load_unaligned(indices);
   }
 
-  template <int kScale>
-  static xsimd::batch<T, A>
-  apply(const T* base, const int32_t* indices, const xsimd::generic&) {
-    return genericGather<T, A, kScale>(base, indices);
-  }
-
   using VIndexType = xsimd::batch<int32_t, A>;
 
   template <int kScale>
   static xsimd::batch<T, A>
+  apply(const T* base, const int32_t* indices, const xsimd::generic&) {
+    auto vindex = VIndexType::load_unaligned(indices);
+    return apply<kScale>(base, vindex, A{});
+  }
+
+  template <int kScale>
+  static xsimd::batch<T, A>
   apply(const T* base, VIndexType vindex, const xsimd::generic&) {
-    alignas(A::alignment()) int32_t indices[vindex.size];
-    vindex.store_aligned(indices);
-    return genericGather<T, A, kScale>(base, indices);
+    return genericGather<T, A, kScale>(base, vindex);
   }
 
   template <int kScale>
@@ -456,7 +448,8 @@ struct Gather<T, int32_t, A, 8> {
       const T* base,
       const int32_t* indices,
       const xsimd::generic&) {
-    return genericMaskGather<T, A, kScale>(src, mask, base, indices);
+    return genericMaskGather<T, A, kScale>(
+        src, mask, base, loadIndices(indices, A{}));
   }
 };
 
@@ -471,7 +464,7 @@ struct Gather<T, int64_t, A, 8> {
   template <int kScale>
   static xsimd::batch<T, A>
   apply(const T* base, const int64_t* indices, const xsimd::generic&) {
-    return genericGather<T, A, kScale>(base, indices);
+    return genericGather<T, A, kScale>(base, loadIndices(indices, A{}));
   }
 
   template <int kScale>
@@ -481,7 +474,8 @@ struct Gather<T, int64_t, A, 8> {
       const T* base,
       const int64_t* indices,
       const xsimd::generic&) {
-    return genericMaskGather<T, A, kScale>(src, mask, base, indices);
+    return genericMaskGather<T, A, kScale>(
+        src, mask, base, loadIndices(indices, A{}));
   }
 
   template <int kScale>
@@ -491,9 +485,7 @@ struct Gather<T, int64_t, A, 8> {
       const T* base,
       VIndexType vindex,
       const xsimd::generic&) {
-    alignas(A::alignment()) int64_t indices[vindex.size];
-    vindex.store_aligned(indices);
-    return genericMaskGather<T, A, kScale>(src, mask, base, indices);
+    return genericMaskGather<T, A, kScale>(src, mask, base, vindex);
   }
 };
 
@@ -680,14 +672,15 @@ struct GetHalf {
         TargetT;
 
     // Kinda hacky, but this is what the original code expects.
-    if constexpr (std::is_same_v<SourceT, int32_t> && std::is_same_v<TargetT, uint64_t>) {
-      using UnsignedSourceT __attribute__((vector_size(HalfN * sizeof(SourceT)))) = uint32_t;
+    if constexpr (
+        std::is_same_v<SourceT, int32_t> && std::is_same_v<TargetT, uint64_t>) {
+      using UnsignedSourceT
+          __attribute__((vector_size(HalfN * sizeof(SourceT)))) = uint32_t;
       auto reinterpret_unsigned = reinterpret_cast<UnsignedSourceT&>(*half);
       return __builtin_convertvector(reinterpret_unsigned, TargetVecT);
     } else {
       return __builtin_convertvector(*half, TargetVecT);
     }
-
   }
 
   // SourceT == TargetT
