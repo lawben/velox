@@ -73,8 +73,7 @@ target_link_libraries(
   velox_codegen
   velox_common_base
   velox_test_util
-  velox_arrow_bridge
-  atomic)
+  velox_arrow_bridge)
 
 #if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)
