@@ -20,6 +20,7 @@
 
 #include "velox/codegen/Codegen.h"
 #include "velox/common/base/SuccinctPrinter.h"
+#include "velox/common/file/FileSystems.h"
 #include "velox/common/time/Timer.h"
 #include "velox/exec/CrossJoinBuild.h"
 #include "velox/exec/Exchange.h"
@@ -189,7 +190,22 @@ Task::~Task() {
       }
     }
   } catch (const std::exception& e) {
-    LOG(WARNING) << "Caught exception in ~Task(): " << e.what();
+    LOG(WARNING) << "Caught exception in Task " << taskId()
+                 << " destructor: " << e.what();
+  }
+
+  removeSpillDirectoryIfExists();
+}
+
+void Task::removeSpillDirectoryIfExists() {
+  if (!spillDirectory_.empty()) {
+    try {
+      auto fs = filesystems::getFileSystem(spillDirectory_, nullptr);
+      fs->rmdir(spillDirectory_);
+    } catch (const std::exception& e) {
+      LOG(ERROR) << "Failed to remove spill directory '" << spillDirectory_
+                 << "' for Task " << taskId() << ": " << e.what();
+    }
   }
 }
 
@@ -198,22 +214,45 @@ Task::getOrAddNodePool(const core::PlanNodeId& planNodeId) {
   if (nodePools_.count(planNodeId) == 1) {
     return nodePools_[planNodeId];
   }
+
   childPools_.push_back(pool_->addChild(fmt::format("node.{}", planNodeId)));
   auto* nodePool = childPools_.back().get();
   auto parentTracker = pool_->getMemoryUsageTracker();
   if (parentTracker != nullptr) {
     nodePool->setMemoryUsageTracker(parentTracker->addChild());
   }
+  nodePools_[planNodeId] = nodePool;
   return nodePool;
 }
 
-velox::memory::MemoryPool* FOLLY_NONNULL Task::addOperatorPool(
+velox::memory::MemoryPool* Task::addOperatorPool(
     const core::PlanNodeId& planNodeId,
     int pipelineId,
+    uint32_t driverId,
     const std::string& operatorType) {
   auto* nodePool = getOrAddNodePool(planNodeId);
+  childPools_.push_back(nodePool->addChild(fmt::format(
+      "op.{}.{}.{}.{}", planNodeId, pipelineId, driverId, operatorType)));
+  return childPools_.back().get();
+}
+
+velox::memory::MemoryPool* Task::addMergeSourcePool(
+    const core::PlanNodeId& planNodeId,
+    uint32_t pipelineId,
+    uint32_t sourceId) {
+  std::lock_guard<std::mutex> l(mutex_);
+  auto* nodePool = getOrAddNodePool(planNodeId);
+  childPools_.push_back(nodePool->addChild(fmt::format(
+      "mergeExchangeClient.{}.{}.{}", planNodeId, pipelineId, sourceId)));
+  return childPools_.back().get();
+}
+
+velox::memory::MemoryPool* Task::addExchangeClientPool(
+    const core::PlanNodeId& planNodeId,
+    uint32_t pipelineId) {
+  auto* nodePool = getOrAddNodePool(planNodeId);
   childPools_.push_back(nodePool->addChild(
-      fmt::format("op.{}.{}.{}", planNodeId, pipelineId, operatorType)));
+      fmt::format("exchangeClient.{}.{}", planNodeId, pipelineId)));
   return childPools_.back().get();
 }
 
@@ -420,6 +459,12 @@ void Task::start(
           self->numDriversInPartitionedOutput_ * numSplitGroups);
     }
 
+    // NOTE: MergeExchangeNode doesn't use the exchange client created here to
+    // fetch data from the merge source but only uses it to send abortResults
+    // to the merge source of the split which is added after the task has
+    // failed. Correspondingly, MergeExchangeNode creates one exchange client
+    // for each merge source to fetch data as we can't mix the data from
+    // different sources for merging.
     if (auto exchangeNodeId = factory->needsExchangeClient()) {
       self->createExchangeClient(pipeline, exchangeNodeId.value());
     }
@@ -727,6 +772,7 @@ void Task::addSplit(const core::PlanNodeId& planNodeId, exec::Split&& split) {
   }
 
   if (!isTaskRunning) {
+    // Safe because 'split' is moved away above only if 'isTaskRunning'.
     addRemoteSplit(planNodeId, split);
   }
 }
@@ -758,39 +804,50 @@ std::unique_ptr<ContinuePromise> Task::addSplitLocked(
   ++taskStats_.numTotalSplits;
   ++taskStats_.numQueuedSplits;
 
+  if (split.connectorSplit) {
+    // Tests may use the same splits list many times. Make sure there
+    // is no async load pending on any, if, for example, a test did
+    // not process all its splits.
+    split.connectorSplit->dataSource.reset();
+  }
   if (isUngroupedExecution()) {
-    VELOX_DCHECK(
-        not split.hasGroup(), "Got split group for ungrouped execution!");
+    VELOX_USER_DCHECK(
+        not split.hasGroup(),
+        "Got split group for ungrouped execution of task {}!",
+        taskId());
     return addSplitToStoreLocked(
         splitsState.groupSplitsStores[0], std::move(split));
-  } else {
-    VELOX_CHECK(split.hasGroup(), "Missing split group for grouped execution!");
-    const auto splitGroupId = split.groupId; // Avoid eval order c++ warning.
-    // If this is the 1st split from this group, add the split group to queue.
-    // Also add that split group to the set of 'seen' split groups.
-    if (seenSplitGroups_.find(splitGroupId) == seenSplitGroups_.end()) {
-      seenSplitGroups_.emplace(splitGroupId);
-      queuedSplitGroups_.push(splitGroupId);
-      auto self = shared_from_this();
-      // We might have some free driver slots to process this split group.
-      ensureSplitGroupsAreBeingProcessedLocked(self);
-    }
-    return addSplitToStoreLocked(
-        splitsState.groupSplitsStores[splitGroupId], std::move(split));
   }
+
+  VELOX_USER_CHECK(
+      split.hasGroup(),
+      "Missing split group for grouped execution of task {}!",
+      taskId());
+  const auto splitGroupId = split.groupId; // Avoid eval order c++ warning.
+  // If this is the 1st split from this group, add the split group to queue.
+  // Also add that split group to the set of 'seen' split groups.
+  if (seenSplitGroups_.find(splitGroupId) == seenSplitGroups_.end()) {
+    seenSplitGroups_.emplace(splitGroupId);
+    queuedSplitGroups_.push(splitGroupId);
+    auto self = shared_from_this();
+    // We might have some free driver slots to process this split group.
+    ensureSplitGroupsAreBeingProcessedLocked(self);
+  }
+  return addSplitToStoreLocked(
+      splitsState.groupSplitsStores[splitGroupId], std::move(split));
 }
 
 std::unique_ptr<ContinuePromise> Task::addSplitToStoreLocked(
     SplitsStore& splitsStore,
     exec::Split&& split) {
   splitsStore.splits.push_back(split);
-  if (not splitsStore.splitPromises.empty()) {
-    auto promise = std::make_unique<ContinuePromise>(
-        std::move(splitsStore.splitPromises.back()));
-    splitsStore.splitPromises.pop_back();
-    return promise;
+  if (splitsStore.splitPromises.empty()) {
+    return nullptr;
   }
-  return nullptr;
+  auto promise = std::make_unique<ContinuePromise>(
+      std::move(splitsStore.splitPromises.back()));
+  splitsStore.splitPromises.pop_back();
+  return promise;
 }
 
 void Task::noMoreSplitsForGroup(
@@ -908,24 +965,36 @@ BlockingReason Task::getSplitOrFuture(
     uint32_t splitGroupId,
     const core::PlanNodeId& planNodeId,
     exec::Split& split,
-    ContinueFuture& future) {
+    ContinueFuture& future,
+    int32_t maxPreloadSplits,
+    std::function<void(std::shared_ptr<connector::ConnectorSplit>)> preload) {
   std::lock_guard<std::mutex> l(mutex_);
 
   auto& splitsState = splitsStates_[planNodeId];
 
   if (isUngroupedExecution()) {
     return getSplitOrFutureLocked(
-        splitsState.groupSplitsStores[0], split, future);
+        splitsState.groupSplitsStores[0],
+        split,
+        future,
+        maxPreloadSplits,
+        preload);
   } else {
     return getSplitOrFutureLocked(
-        splitsState.groupSplitsStores[splitGroupId], split, future);
+        splitsState.groupSplitsStores[splitGroupId],
+        split,
+        future,
+        maxPreloadSplits,
+        preload);
   }
 }
 
 BlockingReason Task::getSplitOrFutureLocked(
     SplitsStore& splitsStore,
     exec::Split& split,
-    ContinueFuture& future) {
+    ContinueFuture& future,
+    int32_t maxPreloadSplits,
+    std::function<void(std::shared_ptr<connector::ConnectorSplit>)> preload) {
   if (splitsStore.splits.empty()) {
     if (splitsStore.noMoreSplits) {
       return BlockingReason::kNotBlocked;
@@ -937,13 +1006,33 @@ BlockingReason Task::getSplitOrFutureLocked(
     return BlockingReason::kWaitForSplit;
   }
 
-  split = getSplitLocked(splitsStore);
+  split = getSplitLocked(splitsStore, maxPreloadSplits, preload);
   return BlockingReason::kNotBlocked;
 }
 
-exec::Split Task::getSplitLocked(SplitsStore& splitsStore) {
-  auto split = std::move(splitsStore.splits.front());
-  splitsStore.splits.pop_front();
+exec::Split Task::getSplitLocked(
+    SplitsStore& splitsStore,
+    int32_t maxPreloadSplits,
+    std::function<void(std::shared_ptr<connector::ConnectorSplit>)> preload) {
+  int32_t readySplitIndex = -1;
+  if (maxPreloadSplits) {
+    for (auto i = 0; i < splitsStore.splits.size() && i < maxPreloadSplits;
+         ++i) {
+      auto& split = splitsStore.splits[i].connectorSplit;
+      if (!split->dataSource) {
+        // Initializes split->dataSource
+        preload(split);
+      } else if (readySplitIndex == -1 && split->dataSource->hasValue()) {
+        readySplitIndex = i;
+      }
+    }
+  }
+  if (readySplitIndex == -1) {
+    readySplitIndex = 0;
+  }
+  assert(!splitsStore.splits.empty());
+  auto split = std::move(splitsStore.splits[readySplitIndex]);
+  splitsStore.splits.erase(splitsStore.splits.begin() + readySplitIndex);
 
   --taskStats_.numQueuedSplits;
   ++taskStats_.numRunningSplits;
@@ -999,26 +1088,23 @@ bool Task::isFinishedLocked() const {
   return (state_ == TaskState::kFinished);
 }
 
-void Task::updateBroadcastOutputBuffers(int numBuffers, bool noMoreBuffers) {
+bool Task::updateBroadcastOutputBuffers(int numBuffers, bool noMoreBuffers) {
   auto bufferManager = bufferManager_.lock();
   VELOX_CHECK_NOT_NULL(
       bufferManager,
       "Unable to initialize task. "
       "PartitionedOutputBufferManager was already destructed");
-
   {
     std::lock_guard<std::mutex> l(mutex_);
     if (noMoreBroadcastBuffers_) {
       // Ignore messages received after no-more-buffers message.
-      return;
+      return false;
     }
-
     if (noMoreBuffers) {
       noMoreBroadcastBuffers_ = true;
     }
   }
-
-  bufferManager->updateBroadcastOutputBuffers(
+  return bufferManager->updateBroadcastOutputBuffers(
       taskId_, numBuffers, noMoreBuffers);
 }
 
@@ -1335,7 +1421,7 @@ ContinueFuture Task::terminate(TaskState terminalState) {
         std::vector<exec::Split> splits;
         for (auto& [groupId, store] : splitState.groupSplitsStores) {
           while (!store.splits.empty()) {
-            splits.emplace_back(getSplitLocked(store));
+            splits.emplace_back(getSplitLocked(store, 0, nullptr));
           }
         }
         if (!splits.empty()) {
@@ -1352,11 +1438,6 @@ ContinueFuture Task::terminate(TaskState terminalState) {
   for (auto& [planNodeId, splits] : remainingRemoteSplits) {
     auto client = getExchangeClient(planNodeId);
     for (auto& split : splits.first) {
-      if (client->pool() == nullptr) {
-        // If we terminate even before the client's initialization, we
-        // initialize the client with Task's memory pool.
-        client->initialize(pool_.get());
-      }
       addRemoteSplit(planNodeId, split);
     }
     if (splits.second) {
@@ -1494,11 +1575,12 @@ ContinueFuture Task::stateChangeFuture(uint64_t maxWaitMicros) {
 }
 
 std::string Task::toString() const {
+  std::lock_guard<std::mutex> l(mutex_);
   std::stringstream out;
   out << "{Task " << shortId(taskId_) << " (" << taskId_ << ")";
 
   if (exception_) {
-    out << "Error: " << errorMessage() << std::endl;
+    out << "Error: " << errorMessageLocked() << std::endl;
   }
 
   if (planFragment_.planNode) {
@@ -1650,9 +1732,13 @@ void Task::setError(const std::string& message) {
   }
 }
 
+std::string Task::errorMessageLocked() const {
+  return errorMessageImpl(exception_);
+}
+
 std::string Task::errorMessage() const {
   std::lock_guard<std::mutex> l(mutex_);
-  return errorMessageImpl(exception_);
+  return errorMessageLocked();
 }
 
 StopReason Task::enter(ThreadState& state) {
@@ -1841,6 +1927,7 @@ void Task::createExchangeClient(
   // buffer size of the producers.
   exchangeClients_[pipelineId] = std::make_shared<ExchangeClient>(
       destination_,
+      addExchangeClientPool(planNodeId, pipelineId),
       queryCtx()->queryConfig().maxPartitionedOutputBufferSize() / 2);
   exchangeClientByPlanNode_.emplace(planNodeId, exchangeClients_[pipelineId]);
 }

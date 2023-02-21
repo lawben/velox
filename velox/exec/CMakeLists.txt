@@ -17,6 +17,7 @@ add_library(
   AggregateFunctionRegistry.cpp
   AggregationMasks.cpp
   AggregateWindow.cpp
+  ArrowStream.cpp
   ContainerRowSerde.cpp
   CrossJoinBuild.cpp
   CrossJoinProbe.cpp
@@ -72,6 +73,7 @@ target_link_libraries(
   velox_codegen
   velox_common_base
   velox_test_util
+  velox_arrow_bridge
   atomic)
 
 #if(${VELOX_BUILD_TESTING})
