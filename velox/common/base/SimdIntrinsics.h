@@ -77,7 +77,15 @@ struct half_vec {
   }
 };
 
+
+#ifdef __aarch64__
+using generic = generic16;
+#endif
+
+#ifdef __AVX2__
 using generic = generic32;
+#endif
+
 using default_arch = generic;
 
 ///////////////////////////////
