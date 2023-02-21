@@ -627,8 +627,14 @@ class BuildCmd(ProjectCmdBase):
                     )
                     builder.build(install_dirs, reconfigure=reconfigure)
 
-                    with open(built_marker, "w") as f:
-                        f.write(project_hash)
+                    # If we are building the project (not depdendency) and a specific
+                    # cmake_target (not 'install') has been requested, then we don't
+                    # set the built_marker. This allows subsequent runs of getdeps.py
+                    # for the project to run with different cmake_targets to trigger
+                    # cmake
+                    if not (m == manifest and args.cmake_target != "install"):
+                        with open(built_marker, "w") as f:
+                            f.write(project_hash)
 
                     # Only populate the cache from continuous build runs
                     if args.schedule_type == "continuous":
@@ -682,7 +688,10 @@ class BuildCmd(ProjectCmdBase):
     ):
         reconfigure = False
         sources_changed = False
-        if not cached_project.download():
+        if cached_project.download():
+            if not os.path.exists(built_marker):
+                fetcher.update()
+        else:
             check_fetcher = True
             if os.path.exists(built_marker):
                 check_fetcher = False
