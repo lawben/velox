@@ -60,7 +60,10 @@ struct generic64 {
 
 struct sse2 : public generic16 {};
 struct avx : public generic32 {};
-struct avx2 : public generic32 {};
+struct avx2 : public generic32 {
+  constexpr avx2() = default;
+  constexpr avx2(const generic16&){};
+};
 struct avx512 : public generic64 {};
 struct neon : public generic16 {};
 
@@ -77,16 +80,15 @@ struct half_vec {
   }
 };
 
-
 #ifdef __aarch64__
-using generic = generic16;
+using generic = neon;
+using default_arch = neon;
 #endif
 
 #ifdef __AVX2__
-using generic = generic32;
+using generic = avx2;
+using default_arch = avx2;
 #endif
-
-using default_arch = generic;
 
 ///////////////////////////////
 ///          TYPES          ///
