@@ -40,6 +40,7 @@ namespace {
 // TODO Avoid duplication.
 static const std::string kHiveConnectorId = "test-hive";
 static const std::string kTpchConnectorId = "test-tpch";
+static const std::string kTpchBenchmarkConnectorId = "tpch-with-gen";
 
 core::TypedExprPtr parseExpr(
     const std::string& text,
@@ -84,10 +85,15 @@ PlanBuilder& PlanBuilder::tableScan(
       hiveColumnName = it->second;
     }
 
+    // LAWBEN: Replaced original code
+    //    assignments.insert(
+    //        {name,
+    //         std::make_shared<HiveColumnHandle>(
+    //             hiveColumnName, HiveColumnHandle::ColumnType::kRegular,
+    //             type)});
     assignments.insert(
         {name,
-         std::make_shared<HiveColumnHandle>(
-             hiveColumnName, HiveColumnHandle::ColumnType::kRegular, type)});
+         std::make_shared<connector::tpch::TpchColumnHandle>(hiveColumnName)});
   }
   SubfieldFilters filters;
   filters.reserve(subfieldFilters.size());
@@ -116,12 +122,21 @@ PlanBuilder& PlanBuilder::tableScan(
             ->rewriteInputNames(columnAliases);
   }
 
-  auto tableHandle = std::make_shared<HiveTableHandle>(
-      kHiveConnectorId,
-      tableName,
-      true,
-      std::move(filters),
-      remainingFilterExpr);
+  // LAWBEN: Replaced original code
+  //  auto tableHandle = std::make_shared<HiveTableHandle>(
+  //      kHiveConnectorId,
+  //      tableName,
+  //      true,
+  //      std::move(filters),
+  //      remainingFilterExpr);
+
+  auto tableHandle =
+      std::make_shared<connector::tpch::TpchBenchmarkTableHandle>(
+          kTpchBenchmarkConnectorId,
+          tpch::fromTableName(tableName),
+          std::move(filters),
+          remainingFilterExpr);
+
   return tableScan(outputType, tableHandle, assignments);
 }
 

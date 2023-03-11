@@ -61,3 +61,30 @@ target_link_libraries(
     velox_caching
     ${FOLLY_WITH_DEPENDENCIES}
     ${FMT})
+
+add_executable(velox_tpch_with_gen_benchmark TpchWithGenBenchmark.cpp)
+target_link_libraries(
+    velox_tpch_with_gen_benchmark
+
+    velox_vector_test_lib
+    velox_aggregates
+    velox_exec
+    velox_exec_test_lib
+    velox_dwio_common
+    velox_dwio_common_exception
+    velox_dwio_parquet_reader
+    velox_dwio_parquet_writer
+    velox_dwio_dwrf_writer
+    velox_dwio_type_fbhive
+    velox_dwio_common_test_utils
+    velox_hive_connector
+    velox_exception
+    velox_memory
+    velox_process
+    velox_serialization
+    velox_encode
+    velox_type
+    velox_caching
+    ${FOLLY_WITH_DEPENDENCIES}
+    ${FOLLY_BENCHMARK}
+    ${FMT})

@@ -65,7 +65,10 @@ struct avx2 : public generic32 {
   constexpr avx2(const generic16&){};
 };
 struct avx512 : public generic64 {};
-struct neon : public generic16 {};
+struct neon : public generic16 {
+  constexpr neon() = default;
+  constexpr neon(const generic16&){};
+};
 
 struct half_vec {
   constexpr half_vec() = default;

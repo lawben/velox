@@ -17,7 +17,10 @@
 
 #include "velox/connectors/Connector.h"
 #include "velox/connectors/tpch/TpchConnectorSplit.h"
+#include "velox/core/ITypedExpr.h"
 #include "velox/tpch/gen/TpchGen.h"
+#include "velox/type/Filter.h"
+#include "velox/type/Subfield.h"
 
 namespace facebook::velox::connector::tpch {
 
@@ -35,6 +38,45 @@ class TpchColumnHandle : public ColumnHandle {
 
  private:
   const std::string name_;
+};
+
+class TpchBenchmarkTableHandle : public ConnectorTableHandle {
+ public:
+  using SubfieldFilters =
+      std::unordered_map<common::Subfield, std::unique_ptr<common::Filter>>;
+
+  TpchBenchmarkTableHandle(
+      std::string connectorId,
+      velox::tpch::Table table,
+      SubfieldFilters subfieldFilters,
+      const core::TypedExprPtr& remainingFilter)
+      : ConnectorTableHandle(std::move(connectorId)),
+        table_(table),
+        subfieldFilters_(std::move(subfieldFilters)),
+        remainingFilter_(remainingFilter) {}
+
+  ~TpchBenchmarkTableHandle() override {}
+
+  const SubfieldFilters& subfieldFilters() const {
+    return subfieldFilters_;
+  }
+
+  const core::TypedExprPtr& remainingFilter() const {
+    return remainingFilter_;
+  }
+
+  std::string toString() const override {
+    return "TpchBenchmarkTableHandle";
+  }
+
+  velox::tpch::Table getTable() const {
+    return table_;
+  }
+
+ private:
+  const velox::tpch::Table table_;
+  const SubfieldFilters subfieldFilters_;
+  const core::TypedExprPtr remainingFilter_;
 };
 
 // TPC-H table handle uses the underlying enum to describe the target table.
@@ -126,7 +168,7 @@ class TpchDataSource : public DataSource {
   memory::MemoryPool* FOLLY_NONNULL pool_;
 };
 
-class TpchConnector final : public Connector {
+class TpchConnector : public Connector {
  public:
   TpchConnector(
       const std::string& id,
